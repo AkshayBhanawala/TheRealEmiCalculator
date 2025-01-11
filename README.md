@@ -1,4 +1,4 @@
-# The Real EMI Calculator
+# [The Real EMI Calculator](https://akshaybhanawala.github.io/TheRealEmiCalculator/)
 
 The Real EMI Calculator is a Vue 3 application that helps users calculate Equated Monthly Installments (EMI) for loans, taking into account various factors such as discounts, processing fees, and GST. It provides a detailed amortization schedule and explains the total cost of the loan.
 
