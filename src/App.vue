@@ -9,7 +9,10 @@
 						id="baseAmount"
 						v-model.number="baseAmount"
 						type="number"
+						min="0.01"
+						step="0.01"
 						required
+						v-on:input="calculateEMI"
 					/>
 				</div>
 				<div class="input-group">
@@ -18,6 +21,9 @@
 						id="discountAmount"
 						v-model.number="discountAmount"
 						type="number"
+						min="0.00"
+						step="0.01"
+						v-on:input="calculateEMI"
 					/>
 				</div>
 				<div class="input-group">
@@ -26,11 +32,14 @@
 						id="ncEmiDiscountAmount"
 						v-model.number="ncEmiDiscountAmount"
 						type="number"
+						min="0.00"
+						step="0.01"
+						v-on:input="calculateEMI"
 					/>
 				</div>
 				<div class="input-group">
 					<label for="tenure">Tenure (months): *</label>
-					<input id="tenure" v-model.number="tenure" type="number" required />
+					<input id="tenure" v-model.number="tenure" type="number" min="1" required v-on:input="calculateEMI" />
 				</div>
 				<div class="input-group">
 					<label for="interestRate">Interest Rate (%): *</label>
@@ -38,23 +47,27 @@
 						id="interestRate"
 						v-model.number="interestRate"
 						type="number"
+						min="0.00"
 						step="0.01"
 						required
+						v-on:input="calculateEMI"
 					/>
 				</div>
 				<div class="input-group">
-					<label for="processingFee">Processing Fee:</label>
+					<label for="processingFee">Processing Fee (%/₹):</label>
 					<input
 						id="processingFee"
 						v-model.number="processingFee"
 						type="number"
+						min="0.00"
+						step="0.01"
+						placeholder="% or Amount"
+						v-on:input="calculateEMI"
 					/>
 				</div>
 			</div>
 			<div class="button-container">
-				<button @click="calculateEMI" :disabled="!isFormValid">
-					Calculate EMI
-				</button>
+				<!-- <button @click="calculateEMI" :disabled="!isFormValid">Calculate EMI</button> -->
 				<button @click="resetForm" class="reset-button">Reset</button>
 			</div>
 		</div>
@@ -68,8 +81,8 @@
 							<th>Principal Amount</th>
 							<th>Interest</th>
 							<th>Principal + Interest</th>
-							<th>GST on Interest (18%)</th>
-							<th>Processing Fee + GST (18%)</th>
+							<th>GST on Interest ({{ GST * 100 }}%)</th>
+							<th>Processing Fee + GST ({{ GST * 100 }}%)</th>
 							<th>EMI Payable</th>
 							<th>Principal Balance</th>
 						</tr>
@@ -81,7 +94,12 @@
 							<td>{{ formatCurrency(row.interest) }}</td>
 							<td>{{ formatCurrency(row.principalPlusInterest) }}</td>
 							<td>{{ formatCurrency(row.gstOnInterest) }}</td>
-							<td>{{ formatCurrency(row.processingFeeWithGst) }}</td>
+							<td>
+								{{ formatCurrency(row.processingFeeWithGst) }}
+								<div v-if="row.month === 1" style="white-space: nowrap">
+									({{ formatCurrency(row.processingFee) }} + {{ formatCurrency(row.processingFeeGst) }})
+								</div>
+							</td>
 							<td>{{ formatCurrency(row.emiPayable) }}</td>
 							<td>{{ formatCurrency(row.balance) }}</td>
 						</tr>
@@ -96,19 +114,18 @@
 								<strong>{{ formatCurrency(totals.interest) }}</strong>
 							</td>
 							<td>
-								<strong>{{
-									formatCurrency(totals.principalPlusInterest)
-								}}</strong>
+								<strong>{{ formatCurrency(totals.principalPlusInterest) }}</strong>
 							</td>
 							<td>
 								<strong>{{ formatCurrency(totals.gstOnInterest) }}</strong>
 							</td>
 							<td>
-								<strong>{{
-									formatCurrency(totals.processingFeeWithGst)
-								}}</strong>
+								<strong>{{ formatCurrency(totals.processingFeeWithGst) }}</strong>
 							</td>
-							<td class="total-emi-payable">
+							<td
+								class="total-emi-payable"
+								:class="{ 'more-than-principal': truncate(totals.emiPayable) > truncate(totals.principal) }"
+							>
 								<strong>{{ formatCurrency(totals.emiPayable) }}</strong>
 							</td>
 							<td>-</td>
@@ -121,46 +138,64 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed } from 'vue';
 
 interface MonthlyRow {
-	month: number
-	principal: number
-	interest: number
-	principalPlusInterest: number
-	gstOnInterest: number
-	processingFeeWithGst: number
-	emiPayable: number
-	balance: number
+	month: number;
+	principal: number;
+	interest: number;
+	principalPlusInterest: number;
+	gstOnInterest: number;
+	processingFee: number;
+	processingFeeGst: number;
+	processingFeeWithGst: number;
+	emiPayable: number;
+	balance: number;
 }
 
-const GST = 0.18
-const baseAmount = ref<number>()
-const discountAmount = ref<number>(0)
-const ncEmiDiscountAmount = ref<number>(0)
-const tenure = ref<number>()
-const interestRate = ref<number>()
-const processingFee = ref<number>(0)
-const amortizationSchedule = ref<Array<MonthlyRow>>([])
+const GST = 0.18;
+const baseAmount = defineModel<number>('baseAmount', { default: 10000.0 });
+const discountAmount = defineModel<number>('discountAmount', { default: 0.0 });
+const ncEmiDiscountAmount = defineModel<number>('ncEmiDiscountAmount', { default: 0.0 });
+const tenure = defineModel<number>('tenure', { default: 3 });
+const interestRate = defineModel<number>('interestRate', { default: 16.0 });
+const processingFee = defineModel<number>('processingFee', { default: 199.0 });
+const amortizationSchedule = ref<Array<MonthlyRow>>([]);
 
 const isFormValid = computed(() => {
-	return baseAmount.value && tenure.value && interestRate.value
-})
+	return baseAmount.value && baseAmount.value > 0 && tenure.value && tenure.value > 0;
+});
+
+function truncate(number: number) {
+	if (Number.isNaN(number)) return 0.0;
+	const valueString = number.toString();
+	return Number(valueString.slice(0, valueString.indexOf('.') + 3));
+}
 
 const calculateEMI = () => {
-	if (!isFormValid.value) return
+	if (!isFormValid.value) return;
 
-	const principal =
-		baseAmount.value! -
-		(discountAmount.value || 0) -
-		(ncEmiDiscountAmount.value || 0)
-	const monthlyRate = interestRate.value! / 12 / 100
+	baseAmount.value = baseAmount.value > 0 ? baseAmount.value : 0;
+	discountAmount.value = discountAmount.value > 0 ? discountAmount.value : 0;
+	ncEmiDiscountAmount.value = ncEmiDiscountAmount.value > 0 ? ncEmiDiscountAmount.value : 0;
+	tenure.value = tenure.value > 0 ? tenure.value : 0;
+	interestRate.value = interestRate.value > 0 ? interestRate.value : 0;
+	processingFee.value = processingFee.value > 0 ? processingFee.value : 0;
+
+	const principal = baseAmount.value - discountAmount.value - ncEmiDiscountAmount.value;
+	const monthlyRate = interestRate.value / 12 / 100;
+	const monthlyRateForTenure = Math.pow(1 + monthlyRate, tenure.value);
 	const emi =
-		(principal * monthlyRate * Math.pow(1 + monthlyRate, tenure.value!)) /
-		(Math.pow(1 + monthlyRate, tenure.value!) - 1)
+		monthlyRate > 0
+			? (principal * monthlyRate * monthlyRateForTenure) / (monthlyRateForTenure - 1)
+			: principal / tenure.value;
+	const processingFeeAmount = truncate(
+		processingFee.value > 20 ? processingFee.value : (principal * processingFee.value) / 100,
+	);
+	const processingFeeGst = truncate(processingFeeAmount * GST);
 
-	let balance = principal
-	const schedule = []
+	let balance = principal;
+	const schedule: MonthlyRow[] = [];
 
 	// Add month 0 to show initial balance
 	schedule.push({
@@ -169,23 +204,24 @@ const calculateEMI = () => {
 		interest: 0,
 		principalPlusInterest: 0,
 		gstOnInterest: 0,
+		processingFee: 0,
+		processingFeeGst: 0,
 		processingFeeWithGst: 0,
 		emiPayable: 0,
 		balance: principal,
-	})
+	});
 
-	for (let month = 1; month <= tenure.value!; month++) {
-		const interest = balance * monthlyRate
-		const gstOnInterest = interest * GST
-		const principalPaid = emi - interest
-		let processingFeeWithGst = 0
+	for (let month = 1; month <= tenure.value; month++) {
+		const interest = balance * monthlyRate;
+		const gstOnInterest = interest * GST;
+		const principalPaid = emi - interest;
+		let processingFeeWithGst = 0;
 
 		if (month === 1) {
-			processingFeeWithGst =
-				(processingFee.value || 0) + (processingFee.value || 0) * GST
+			processingFeeWithGst = processingFeeAmount + processingFeeGst;
 		}
 
-		balance -= principalPaid
+		balance -= principalPaid;
 
 		schedule.push({
 			month,
@@ -193,30 +229,33 @@ const calculateEMI = () => {
 			interest,
 			principalPlusInterest: principalPaid + interest,
 			gstOnInterest,
+			processingFee: month === 1 ? processingFeeAmount : 0,
+			processingFeeGst: month === 1 ? processingFeeGst : 0,
 			processingFeeWithGst,
 			emiPayable: emi + gstOnInterest + processingFeeWithGst,
 			balance: Math.max(balance, 0),
-		})
+		});
 
-		if (balance <= 0) break
+		if (balance <= 0) break;
 	}
 
-	amortizationSchedule.value = schedule
-}
+	amortizationSchedule.value = schedule;
+};
+calculateEMI();
 
 const totals = computed(() => {
 	return amortizationSchedule.value.reduce(
 		(acc, row) => {
 			if (row.month !== 0) {
 				// Exclude month 0 from totals
-				acc.principal += row.principal
-				acc.interest += row.interest
-				acc.principalPlusInterest += row.principalPlusInterest
-				acc.gstOnInterest += row.gstOnInterest
-				acc.processingFeeWithGst += row.processingFeeWithGst
-				acc.emiPayable += row.emiPayable
+				acc.principal += row.principal;
+				acc.interest += row.interest;
+				acc.principalPlusInterest += row.principalPlusInterest;
+				acc.gstOnInterest += row.gstOnInterest;
+				acc.processingFeeWithGst += row.processingFeeWithGst;
+				acc.emiPayable += row.emiPayable;
 			}
-			return acc
+			return acc;
 		},
 		{
 			principal: 0,
@@ -226,25 +265,26 @@ const totals = computed(() => {
 			processingFeeWithGst: 0,
 			emiPayable: 0,
 		},
-	)
-})
+	);
+});
 
 const formatCurrency = (value: number) => {
 	return new Intl.NumberFormat('en-IN', {
 		style: 'currency',
 		currency: 'INR',
-	}).format(value)
-}
+	}).format(value);
+};
 
 const resetForm = () => {
-	baseAmount.value = undefined
-	discountAmount.value = 0
-	ncEmiDiscountAmount.value = 0
-	tenure.value = undefined
-	interestRate.value = undefined
-	processingFee.value = 0
-	amortizationSchedule.value = []
-}
+	baseAmount.value = 10000;
+	discountAmount.value = 0;
+	ncEmiDiscountAmount.value = 0;
+	tenure.value = 3;
+	interestRate.value = 16;
+	processingFee.value = 199;
+	amortizationSchedule.value = [];
+	calculateEMI();
+};
 </script>
 
 <style scoped>
@@ -379,6 +419,10 @@ tfoot td {
 }
 
 tfoot td.total-emi-payable {
+	color: #4caf50; /* Orange-red color for the total EMI payable */
+}
+
+tfoot td.total-emi-payable.more-than-principal {
 	color: #ff4500; /* Orange-red color for the total EMI payable */
 }
 
