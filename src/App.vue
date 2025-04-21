@@ -169,7 +169,10 @@ const isFormValid = computed(() => {
 function truncate(number: number) {
 	if (Number.isNaN(number)) return 0.0;
 	const valueString = number.toString();
-	return Number(valueString.slice(0, valueString.indexOf('.') + 3));
+	if (valueString.indexOf('.') + 3 > valueString.length) {
+		return Number(valueString.slice(0, valueString.indexOf('.') + 3));
+	}
+	return number;
 }
 
 const calculateEMI = () => {
@@ -193,6 +196,8 @@ const calculateEMI = () => {
 		processingFee.value > 20 ? processingFee.value : (principal * processingFee.value) / 100,
 	);
 	const processingFeeGst = truncate(processingFeeAmount * GST);
+
+	console.log('processingFeeAmount:', processingFee.value);
 
 	let balance = principal;
 	const schedule: MonthlyRow[] = [];
