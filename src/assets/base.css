@@ -18,7 +18,15 @@
 	--vt-c-text-light-1: var(--vt-c-indigo);
 	--vt-c-text-light-2: rgba(60, 60, 60, 0.66);
 	--vt-c-text-dark-1: var(--vt-c-white);
-	--vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+	--vt-c-text-dark-2: rgba(235, 235, 235, 0.9);
+
+	--vt-c-light-bg-image: url('../assets/bg.svg');
+	--vt-c-light-bg-opacity-reduce: 0.15;
+	--vt-c-light-bg-filter: invert(100%);
+
+	--vt-c-dark-bg-image: url('../assets/bg.svg');
+	--vt-c-dark-bg-opacity-reduce: 0.3;
+	--vt-c-dark-bg-filter: unset;
 }
 
 /* semantic color variables for this project */
@@ -34,6 +42,10 @@
 	--color-text: var(--vt-c-text-light-1);
 
 	--section-gap: 160px;
+
+	--bg-image: var(--vt-c-light-bg-image);
+	--bg-opacity-reduce: var(--vt-c-light-bg-opacity-reduce);
+	--bg-filter: var(--vt-c-light-bg-filter);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47,6 +59,10 @@
 
 		--color-heading: var(--vt-c-text-dark-1);
 		--color-text: var(--vt-c-text-dark-2);
+
+		--bg-image: var(--vt-c-dark-bg-image);
+		--bg-opacity-reduce: var(--vt-c-dark-bg-opacity-reduce);
+		--bg-filter: var(--vt-c-dark-bg-filter);
 	}
 }
 
@@ -61,15 +77,37 @@
 body {
 	min-height: 100vh;
 	color: var(--color-text);
-	background-image: url('../assets/windows-11-abstract-purple-dark.jpg');
 	line-height: 1.6;
 	font-family: Quicksand, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 	font-size: 15px;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
-	background-size: cover;
-	background-blend-mode: darken;
-	background-color: rgba(0, 0, 0, 0.1);
+}
+
+body::before {
+	z-index: -2;
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100%;
+	background-image: var(--bg-image);
 	background-attachment: fixed;
 	background-position: center;
+	background-size: cover;
+	-webkit-filter: var(--bg-filter);
+	filter: var(--bg-filter);
+}
+
+body::after {
+	z-index: -1;
+	content: '';
+	position: absolute;
+	height: 100%;
+	width: 100%;
+	top: 0;
+	left: 0;
+	background-color: black;
+	opacity: var(--bg-opacity-reduce);
 }
